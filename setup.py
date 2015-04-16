@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name = 'django-mockups',
-    version = '0.4.8',
+    version = '0.4.9',
     description = 'Provides tools to auto generate content.',
     long_description = open('README.rst').read(),
     author = 'Mikko Hellsing',

@@ -27,11 +27,21 @@ information::
 '''
 from django.core.management.base import BaseCommand, CommandError
 from django.db import models
-from django.db.transaction import commit_on_success
-from django.utils.importlib import import_module
 from ...helpers import create, autodiscover
 from ... import signals
 from optparse import make_option
+
+# For django 1.8 and earlier
+try:
+    from django.db.transaction import atomic
+except ImportError:
+    from django.db.transaction import commit_on_success as atomic
+
+# For django 1.8 and earlier
+try:
+    from importlib import import_module
+except ImportError:
+    from django.utils.importlib import import_module
 
 
 class Command(BaseCommand):
@@ -114,9 +124,14 @@ class Command(BaseCommand):
                         obj.pk,
                         self.format_output(obj))
 
-    @commit_on_success
+    @atomic
     def handle(self, *attrs, **options):
-        from django.db.models import get_model
+        try:
+            from django.apps import apps
+            get_model = apps.get_model
+        except ImportError:
+            # Support django < 1.8
+            from django.db.models import get_model
 
         error_option = None
         #

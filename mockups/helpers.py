@@ -1,8 +1,21 @@
 # -*- coding: utf-8 -*-
 import copy
 from django.conf import settings
-from django.utils.importlib import import_module
 from django.utils.module_loading import module_has_submodule
+
+# For django 1.8 and earlier
+try:
+    from importlib import import_module
+except ImportError:
+    from django.utils.importlib import import_module
+
+try:
+    from django.apps import apps
+
+    get_model = apps.get_model
+except ImportError:
+    # Support django < 1.8
+    from django.db.models import get_model
 
 
 __all__ = ('register', 'unregister', 'create', 'create_one', 'autodiscover')
@@ -12,9 +25,9 @@ _registry = {}
 
 
 def get_mockup(model, *args, **kwargs):
-    '''
+    """
     Gets an mockup instance for a model
-    '''
+    """
     if model not in _registry:
         from mockups.base import Mockup
         cls = Mockup
@@ -45,7 +58,7 @@ def register(model, mockup_cls, overwrite=False, fail_silently=False):
     '''
     from django.db import models
     if isinstance(model, basestring):
-        model = models.get_model(*model.split('.', 1))
+        model = get_model(*model.split('.', 1))
     if not overwrite and model in _registry:
         if fail_silently:
             return
@@ -65,9 +78,9 @@ def unregister(model_or_iterable, fail_silently=False):
     from django.db import models
     if not isinstance(model_or_iterable, (list, tuple, set)):
         model_or_iterable = [model_or_iterable]
-    for model in models:
+    for model in model_or_iterable:
         if isinstance(model, basestring):
-            model = models.get_model(*model.split('.', 1))
+            model = get_model(*model.split('.', 1))
         try:
             del _registry[model]
         except KeyError:
@@ -98,9 +111,13 @@ def create(model, count, *args, **kwargs):
 
     :func:`create` will return a list of the created objects.
     '''
-    from django.db import models
+    # try:
+    #     from django.apps import apps
+    #     get_model = apps.get_model
+    # except ImportError:
+    #     from django.db.models import get_model
     if isinstance(model, basestring):
-        model = models.get_model(*model.split('.', 1))
+        model = get_model(*model.split('.', 1))
     mockup = get_mockup(model, *args, **kwargs)
     return mockup.create(count)
 
@@ -125,22 +142,32 @@ def autodiscover():
 
     global _registry
 
-    for app in settings.INSTALLED_APPS:
-        mod = import_module(app)
-        # Attempt to import the app's mockup module.
-        try:
-            before_import_registry = copy.copy(_registry)
-            import_module('%s.mockup' % app)
-        except:
-            # Reset the model registry to the state before the last import as
-            # this import will have to reoccur on the next request and this
-            # could raise NotRegistered and AlreadyRegistered exceptions
-            # (see #8245).
-            _registry = before_import_registry
 
-            # Decide whether to bubble up this error. If the app just
-            # doesn't have an mockup module, we can ignore the error
-            # attempting to import it, otherwise we want it to bubble up.
-            if module_has_submodule(mod, 'mockup'):
-                raise
+    import imp
+    try:
+        from django.apps import apps
+
+        for app_config in apps.get_app_configs():
+            _registry[app_config.name] = [app_config.path]
+
+    except ImportError:
+
+        for app in settings.INSTALLED_APPS:
+            mod = import_module(app)
+            # Attempt to import the app's mockup module.
+            try:
+                before_import_registry = copy.copy(_registry)
+                import_module('%s.mockup' % app)
+            except:
+                # Reset the model registry to the state before the last import as
+                # this import will have to reoccur on the next request and this
+                # could raise NotRegistered and AlreadyRegistered exceptions
+                # (see #8245).
+                _registry = before_import_registry
+
+                # Decide whether to bubble up this error. If the app just
+                # doesn't have an mockup module, we can ignore the error
+                # attempting to import it, otherwise we want it to bubble up.
+                if module_has_submodule(mod, 'mockup'):
+                    raise
 

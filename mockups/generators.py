@@ -148,8 +148,11 @@ class LoremGenerator(Generator):
         super(LoremGenerator, self).__init__(*args, **kwargs)
 
     def generate(self):
-        from django.contrib.webdesign.lorem_ipsum import paragraphs, sentence, \
-            words
+        try:
+            from django.utils.lorem_ipsum import paragraphs, sentence, words
+        except ImportError:
+            # Support django < 1.8
+            from django.contrib.webdesign.lorem_ipsum import paragraphs, sentence, words
         if self.method == 'w':
             lorem = words(self.count, common=self.common)
         elif self.method == 's':
